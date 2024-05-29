@@ -4,6 +4,8 @@ use config::read_config;
 use startup::run;
 
 mod config;
+mod errors;
+mod notary;
 mod routes;
 mod startup;
 
@@ -16,7 +18,10 @@ async fn main() -> std::io::Result<()> {
         )
     });
 
-    let app_address = format!("{}:{}", app_config.host, app_config.port);
+    let app_address = format!(
+        "{}:{}",
+        app_config.application.host, app_config.application.port
+    );
 
     println!("Starting server at http://{}", app_address);
 

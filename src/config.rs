@@ -1,12 +1,17 @@
 use config;
 
 #[derive(serde::Deserialize)]
+pub struct Settings {
+    pub application: AppConfig,
+}
+
+#[derive(serde::Deserialize)]
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
 }
 
-pub fn read_config() -> Result<AppConfig, config::ConfigError> {
+pub fn read_config() -> Result<Settings, config::ConfigError> {
     let base_path = std::env::current_dir().expect("Failed to determine current directory path");
     let config_dir = base_path.join("config");
 
@@ -23,7 +28,7 @@ pub fn read_config() -> Result<AppConfig, config::ConfigError> {
         .build()
         .unwrap_or_else(|err| panic!("Cannot read app config with error {:?}", err));
 
-    settings.try_deserialize::<AppConfig>()
+    settings.try_deserialize::<Settings>()
 }
 
 pub enum Environment {

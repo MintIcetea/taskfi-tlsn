@@ -3082,8 +3082,14 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "config",
+ "futures",
+ "p256",
  "serde",
+ "serde_json",
  "tlsn-prover",
+ "tlsn-verifier",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -3473,6 +3479,29 @@ dependencies = [
  "tokio-serde",
  "tokio-util",
  "wasm-bindgen-futures",
+]
+
+[[package]]
+name = "tlsn-verifier"
+version = "0.1.0-alpha.5"
+dependencies = [
+ "derive_builder 0.12.0",
+ "futures",
+ "mpz-circuits",
+ "mpz-core",
+ "mpz-garble",
+ "mpz-ot",
+ "mpz-share-conversion",
+ "opaque-debug",
+ "rand",
+ "signature",
+ "thiserror",
+ "tlsn-common",
+ "tlsn-core",
+ "tlsn-tls-core",
+ "tlsn-tls-mpc",
+ "tlsn-utils-aio",
+ "uid-mux",
 ]
 
 [[package]]
