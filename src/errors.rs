@@ -9,7 +9,7 @@ pub struct ServerError<'a> {
 }
 
 impl<'a> ServerError<'a> {
-    pub fn new(message: &str) -> Self {
-        ServerError { error: "hello" }
+    pub fn new(message: &'a str) -> Self {
+        ServerError { error: message }
     }
 }

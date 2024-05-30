@@ -12,7 +12,12 @@ serde = "1.0.203"
 serde_json = "1.0.117"
 tokio = "1.37.0"
 p256 = "0.13.2"
-tlsn-prover = { path = "./dev/tlsn/tlsn-prover" }
-tlsn-verifier = { path = "./dev/tlsn/tlsn-verifier" }
 futures = "0.3.30"
 tokio-util = "0.7.11"
+hyper = { version = "1.1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["full"] }
+
+tlsn-core = { path = "./dev/tlsn/tlsn-core" }
+tlsn-prover = { path = "./dev/tlsn/tlsn-prover" }
+tlsn-verifier = { path = "./dev/tlsn/tlsn-verifier" }
+
