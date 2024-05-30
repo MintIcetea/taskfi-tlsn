@@ -167,6 +167,8 @@ pub async fn handle_notarize_v2(request: HttpRequest) -> HttpResponse {
     // A Prover configuration
     let config = ProverConfig::builder()
         .id("example")
+        .max_recv_data(DEFAULT_MAX_RECV_LIMIT)
+        .max_sent_data(DEFAULT_MAX_SENT_LIMIT)
         .server_dns(notarize_headers.host)
         .build()
         .unwrap();

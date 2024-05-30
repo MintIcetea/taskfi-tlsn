@@ -2,10 +2,7 @@ use std::net::TcpListener;
 
 use actix_web::{dev::Server, web, App, HttpServer};
 
-use crate::routes::{
-    health_check::handle_health_check,
-    notarize::{handle_notarize, handle_notarize_v2},
-};
+use crate::routes::{health_check::handle_health_check, notarize::handle_notarize_v2};
 
 pub async fn run(listener: TcpListener) -> Result<Server, std::io::Error> {
     let server = HttpServer::new(move || {
