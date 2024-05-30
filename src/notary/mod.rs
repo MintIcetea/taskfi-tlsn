@@ -1,11 +1,11 @@
+use elliptic_curve::pkcs8::DecodePrivateKey;
 use futures::{AsyncRead, AsyncWrite};
-use p256::pkcs8::DecodePrivateKey;
 use tlsn_verifier::tls::{Verifier, VerifierConfig};
 
-/// Default for the maximum number of bytes that can be sent (32Kb).
-pub const DEFAULT_MAX_SENT_LIMIT: usize = 1 << 16;
-/// Default for the maximum number of bytes that can be received (32Kb).
-pub const DEFAULT_MAX_RECV_LIMIT: usize = 1 << 16;
+/// Default for the maximum number of bytes that can be sent (8Kb).
+pub const DEFAULT_MAX_SENT_LIMIT: usize = 1 << 12;
+/// Default for the maximum number of bytes that can be received (8Kb).
+pub const DEFAULT_MAX_RECV_LIMIT: usize = 1 << 14;
 
 /// Runs a simple Notary with the provided connection to the Prover.
 pub async fn run_notary<T: AsyncWrite + AsyncRead + Send + Unpin + 'static>(conn: T) {

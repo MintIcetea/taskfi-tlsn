@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 #[derive(serde::Deserialize)]
 pub struct ServerResponse<T> {
     pub data: T,
@@ -11,5 +13,11 @@ pub struct ServerError<'a> {
 impl<'a> ServerError<'a> {
     pub fn new(message: &'a str) -> Self {
         ServerError { error: message }
+    }
+}
+
+impl<'a> Debug for ServerError<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error)
     }
 }
