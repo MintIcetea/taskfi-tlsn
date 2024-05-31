@@ -3,7 +3,10 @@ use crate::{
     notary::{run_notary, DEFAULT_MAX_RECV_LIMIT, DEFAULT_MAX_SENT_LIMIT},
     r2::R2Manager,
 };
-use actix_web::{http::header::HeaderMap, web, HttpRequest, HttpResponse};
+use actix_web::{
+    http::{header::HeaderMap, Method},
+    web, HttpRequest, HttpResponse,
+};
 use hyper::{Request, StatusCode};
 use hyper_util::rt::TokioIo;
 use serde_json::json;
@@ -25,7 +28,11 @@ struct NotarizeHeaders<'a> {
     method: &'a str,
 }
 
-pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest) -> HttpResponse {
+pub async fn handle_notarize_v2(
+    data: web::Data<R2Manager>,
+    request: HttpRequest,
+    bytes: actix_web::web::Bytes,
+) -> HttpResponse {
     let r2 = data.clone();
 
     let headers = request.headers();
@@ -39,11 +46,32 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
         Ok(header) => header,
         Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
     };
-    println!(
+    info!(
         "Headers extracted: notarizer headers:{} + auth header {}",
         json!(notarize_headers).to_string(),
         auth_header
     );
+
+    let request_body = match String::from_utf8(bytes.to_vec()) {
+        Ok(body) => body,
+        Err(_) => {
+            if request.method() != Method::GET {
+                return HttpResponse::BadRequest().body(
+                    json!(ServerError::new(
+                        format!(
+                            "Cannot execute {} request without request body",
+                            request.method().to_string()
+                        )
+                        .as_str()
+                    ))
+                    .to_string(),
+                );
+            }
+
+            String::from("")
+        }
+    };
+    info!("Body extracted {}", json!(request_body).to_string());
 
     let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
@@ -107,7 +135,7 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
         .header("Authorization", format!("Bearer {}", auth_header))
         .header("Accept", "*/*")
         .header("User-Agent", "TaskFi ID")
-        .body(String::from(""))
+        .body(request_body)
         .unwrap();
 
     let response = match request_sender.send_request(request_builder).await {
