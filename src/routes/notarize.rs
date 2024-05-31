@@ -134,7 +134,7 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     info!("Start uploading {} to R2", file_name);
     r2.upload(
         file_name.as_str(),
-        serde_json::to_string_pretty(&proof).unwrap().as_bytes(),
+        serde_json::to_string(&proof).unwrap().as_bytes(),
         Some("immutable"),
         Some("multipart/form-data"),
     )
