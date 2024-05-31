@@ -1,23 +1,17 @@
 use aws_sdk_s3::config::Credentials;
 use aws_sdk_s3::config::SharedCredentialsProvider;
-use once_cell::sync::Lazy;
 use std::sync::Arc;
 
 use tracing::log::debug;
 use tracing::log::error;
 use tracing::log::info;
 
-use aws_config::SdkConfig;
 use aws_sdk_s3::config::Region;
 use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::primitives::SdkBody;
 use aws_sdk_s3::Client;
 
 use crate::config::R2Config;
-
-static S3_CONFIG: Lazy<SdkConfig> = Lazy::new(|| {
-    return SdkConfig::builder().build();
-});
 
 /// A struct providing most necessary APIs to work with Cloudflare R2 object storage.
 #[derive(Debug, Clone)]

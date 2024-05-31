@@ -2,7 +2,6 @@ use std::net::TcpListener;
 
 use actix_web::{dev::Server, web, App, HttpServer};
 use tracing_actix_web::TracingLogger;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 use crate::{
     r2::R2Manager,
