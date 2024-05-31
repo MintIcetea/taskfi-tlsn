@@ -5,6 +5,8 @@
   "r2": {
     "uri": "https://example.com",
     "bucket_name": "example-name",
-    "region": "example-region"
+    "region": "example-region",
+    "access_key": "example",
+    "secret_access_key": "example"
   }
 }

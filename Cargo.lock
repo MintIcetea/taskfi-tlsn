@@ -3971,6 +3971,7 @@ version = "0.1.0"
 dependencies = [
  "actix-web",
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-s3",
  "config",
  "elliptic-curve 0.13.8",

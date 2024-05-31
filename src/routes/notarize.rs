@@ -10,6 +10,7 @@ use serde_json::json;
 use tlsn_core::proof::TlsProof;
 use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing_log::log::info;
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct NotarizeHeaders<'a> {
@@ -55,11 +56,13 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
 
     // Create a Prover and set it up with the Notary
     // This will set up the MPC backend prior to connecting to the server.
+    info!("Init local prover");
     let prover = Prover::new(config)
         .setup(prover_socket.compat())
         .await
         .unwrap();
 
+    info!("Init TLS connection from client to server");
     // Connect to the Server via TCP. This is the TLS client socket.
     let client_socket = tokio::net::TcpStream::connect((notarize_headers.host, 443))
         .await
@@ -68,6 +71,7 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     // Bind the Prover to the server connection.
     // The returned `mpc_tls_connection` is an MPC TLS connection to the Server: all data written
     // to/read from it will be encrypted/decrypted using MPC with the Notary.
+    info!("Binding Prover to the connection between local prover and server");
     let (mpc_tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
     let mpc_tls_connection = TokioIo::new(mpc_tls_connection.compat());
 
@@ -84,7 +88,7 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     tokio::spawn(connection);
 
     // Build a simple HTTP request with common headers
-    println!(
+    info!(
         "Requesting to https://{}/{}",
         notarize_headers.host, notarize_headers.path
     );
@@ -113,6 +117,11 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
         }
     };
     assert!(response.status() == StatusCode::OK);
+    info!(
+        "Request to https://{}/{} came back OK",
+        notarize_headers.host, notarize_headers.path
+    );
+
     // The Prover task should be done now, so we can grab the Prover.
     let prover = prover_task.await.unwrap().unwrap();
 
@@ -121,6 +130,8 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     let proof = build_proof_without_redactions(prover).await;
 
     let file_name = format!("{}.json", notarize_headers.id);
+
+    info!("Start uploading {} to R2", file_name);
     r2.upload(
         file_name.as_str(),
         serde_json::to_string_pretty(&proof).unwrap().as_bytes(),

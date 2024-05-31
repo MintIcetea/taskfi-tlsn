@@ -1,3 +1,5 @@
+use aws_sdk_s3::config::Credentials;
+use aws_sdk_s3::config::SharedCredentialsProvider;
 use once_cell::sync::Lazy;
 use std::sync::Arc;
 
@@ -28,11 +30,17 @@ impl R2Manager {
     /// Creates a new instance of R2Manager. The region is set to us-east-1 which aliases
     /// to auto. Read more here <https://developers.cloudflare.com/r2/api/s3/api/>.
     pub async fn new(config: &R2Config) -> R2Manager {
+        let s3_credential = Credentials::from_keys(
+            config.access_key.clone(),
+            config.secret_access_key.clone(),
+            None,
+        );
         let s3_config = aws_config::load_from_env()
             .await
             .into_builder()
             .endpoint_url(config.uri.clone())
             .region(Region::new(config.region.clone()))
+            .credentials_provider(SharedCredentialsProvider::new(s3_credential))
             .build();
 
         let manager = R2Manager {

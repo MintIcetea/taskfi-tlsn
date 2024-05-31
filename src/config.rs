@@ -17,6 +17,8 @@ pub struct R2Config {
     pub uri: String,
     pub bucket_name: String,
     pub region: String,
+    pub access_key: String,
+    pub secret_access_key: String,
 }
 
 pub fn read_config() -> Result<Settings, config::ConfigError> {
