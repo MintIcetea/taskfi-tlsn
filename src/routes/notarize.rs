@@ -12,6 +12,11 @@ use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing_log::log::info;
 
+#[derive(serde::Serialize)]
+struct NotarizeResponse {
+    id: String,
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
 struct NotarizeHeaders<'a> {
     id: &'a str,
@@ -140,7 +145,12 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     )
     .await;
 
-    HttpResponse::Ok().body(serde_json::to_string(&proof).unwrap())
+    HttpResponse::Ok().body(
+        serde_json::to_string(&NotarizeResponse {
+            id: notarize_headers.id.to_string(),
+        })
+        .unwrap(),
+    )
 }
 
 async fn build_proof_without_redactions(mut prover: Prover<Notarize>) -> TlsProof {
