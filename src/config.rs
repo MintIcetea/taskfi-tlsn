@@ -3,12 +3,20 @@ use config;
 #[derive(serde::Deserialize)]
 pub struct Settings {
     pub application: AppConfig,
+    pub r2: R2Config,
 }
 
 #[derive(serde::Deserialize)]
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
+}
+
+#[derive(serde::Deserialize)]
+pub struct R2Config {
+    pub uri: String,
+    pub bucket_name: String,
+    pub region: String,
 }
 
 pub fn read_config() -> Result<Settings, config::ConfigError> {

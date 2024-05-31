@@ -20,7 +20,7 @@ async fn main() -> std::io::Result<()> {
         )
     });
 
-    let r2 = R2Manager::new().await;
+    let r2 = R2Manager::new(&app_config.r2).await;
 
     let app_address = format!(
         "{}:{}",

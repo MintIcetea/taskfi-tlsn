@@ -11,6 +11,8 @@ use aws_sdk_s3::primitives::ByteStream;
 use aws_sdk_s3::primitives::SdkBody;
 use aws_sdk_s3::Client;
 
+use crate::config::R2Config;
+
 static S3_CONFIG: Lazy<SdkConfig> = Lazy::new(|| {
     return SdkConfig::builder().build();
 });
@@ -25,32 +27,28 @@ pub struct R2Manager {
 impl R2Manager {
     /// Creates a new instance of R2Manager. The region is set to us-east-1 which aliases
     /// to auto. Read more here <https://developers.cloudflare.com/r2/api/s3/api/>.
-    pub async fn new() -> R2Manager {
-        let uri = std::env::var("CF_R2_URI").expect("missing R2 URI");
-        let bucket_name = std::env::var("CF_R2_BUCKET").expect("missing R2 bucket name");
-        let region = std::env::var("CF_R2_REGION").expect("missing R2 region");
-
+    pub async fn new(config: &R2Config) -> R2Manager {
         let s3_config = aws_config::load_from_env()
             .await
             .into_builder()
-            .endpoint_url(uri)
-            .region(Region::new(region))
+            .endpoint_url(config.uri.clone())
+            .region(Region::new(config.region.clone()))
             .build();
 
-        unsafe {
-            let manager = R2Manager {
-                bucket_name,
-                client: Arc::new(aws_sdk_s3::Client::new(&s3_config)),
-            };
-            return manager;
-        }
+        let manager = R2Manager {
+            bucket_name: config.bucket_name.clone(),
+            client: Arc::new(aws_sdk_s3::Client::new(&s3_config)),
+        };
+        return manager;
     }
 
+    #[allow(dead_code)]
     /// Get the bucket name of the R2Manager.
     pub fn get_bucket_name(&self) -> &str {
         &self.bucket_name
     }
 
+    #[allow(dead_code)]
     /// Create a bucket.
     pub async fn create_bucket(&self) {
         let create_bucket_request = self.client.create_bucket().bucket(&self.bucket_name);
@@ -66,6 +64,7 @@ impl R2Manager {
         }
     }
 
+    #[allow(dead_code)]
     /// Delete a bucket.
     pub async fn delete_bucket(&self) {
         let delete_bucket_request = self.client.delete_bucket().bucket(&self.bucket_name);
@@ -81,6 +80,7 @@ impl R2Manager {
         }
     }
 
+    #[allow(dead_code)]
     /// Upload an object in &[u8] format.
     /// ```
     /// let str_bytes = "Hello there!".as_bytes();
@@ -123,6 +123,7 @@ impl R2Manager {
         }
     }
 
+    #[allow(dead_code)]
     /// Get an object in Vec<u8> form.
     pub async fn get(&self, object_name: &str) -> Option<Vec<u8>> {
         let get_request = self
@@ -146,6 +147,7 @@ impl R2Manager {
         }
     }
 
+    #[allow(dead_code)]
     /// Delete an object.
     pub async fn delete(&self, object_name: &str) {
         let delete_request = self

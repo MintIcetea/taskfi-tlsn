@@ -19,126 +19,6 @@ struct NotarizeHeaders<'a> {
     method: &'a str,
 }
 
-// TODO: Add notarize handler for other providers
-// This currently only handle GitHub request
-#[tracing::instrument(name = "Notarize request")]
-// pub async fn handle_notarize(request: HttpRequest) -> HttpResponse {
-//     let headers = request.headers();
-//     let notarize_headers = match extract_headers(headers) {
-//         Ok(headers) => headers,
-//         Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
-//     };
-
-//     // Separate this as not all APIs require authorization
-//     let auth_header = match extract_header(headers, "x-tlsn-auth") {
-//         Ok(header) => header,
-//         Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
-//     };
-//     println!(
-//         "Headers extracted: notarizer headers:{} + auth header {}",
-//         json!(notarize_headers).to_string(),
-//         auth_header
-//     );
-
-//     // Setup prover and notary server
-//     let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
-
-//     // Setup local notary server, connected to prover_socket
-//     // tokio::spawn(run_notary(notary_socket.compat()));
-
-//     // Setup local prover
-//     // let prover = match setup_prover(prover_socket, notarize_headers.host).await {
-//     //     Ok(prover) => prover,
-//     //     Err(error) => return HttpResponse::InternalServerError().body(json!(error).to_string()),
-//     // };
-//     let prover = setup_prover(prover_socket, notarize_headers.host)
-//         .await
-//         .unwrap();
-//     println!("Prover init");
-
-//     // Setup MPC-TLS between client and prover
-//     let client_socket = match tokio::net::TcpStream::connect((notarize_headers.host, 443)).await {
-//         Ok(stream) => stream,
-//         Err(_) => {
-//             return HttpResponse::InternalServerError().body(
-//                 json!(ServerError::new(
-//                     format!(
-//                         "Failed to establish TLS connection from client to {}",
-//                         notarize_headers.host
-//                     )
-//                     .as_str()
-//                 ))
-//                 .to_string(),
-//             );
-//         }
-//     };
-//     println!("Client init");
-
-//     let (mpc_tls_connection, prover_fut) = match prover.connect(client_socket.compat()).await {
-//         Ok(connection) => connection,
-//         Err(_) => {
-//             return HttpResponse::InternalServerError().body(
-//                 json!(ServerError::new(
-//                     "Failed to establish MPC-TLS connection between client, server, and prover",
-//                 ))
-//                 .to_string(),
-//             )
-//         }
-//     };
-//     println!("MPC-TLS connection between prover and client init");
-
-//     let prover_task = tokio::spawn(prover_fut);
-
-//     // Attach the hyper HTTP client to the TLS connection
-//     let (mut request_sender, connection) =
-//         conn::http1::handshake::<_, String>(TokioIo::new(mpc_tls_connection.compat()))
-//             .await
-//             .unwrap();
-
-//     // Spawn the HTTP task to be run concurrently
-//     tokio::spawn(connection);
-
-//     // Build a simple HTTP request with common headers
-//     println!(
-//         "Requesting to https://{}/{}",
-//         notarize_headers.path, notarize_headers.path
-//     );
-//     let request_builder = Request::builder()
-//         .uri(format!(
-//             "https://{}/{}",
-//             notarize_headers.path, notarize_headers.path
-//         ))
-//         .method(notarize_headers.method)
-//         .header("Authorization", format!("Bearer {}", auth_header))
-//         .header("Accept", "*/*")
-//         // Using "identity" instructs the Server not to use compression for its HTTP response.
-//         // TLSNotary tooling does not support compression.
-//         .header("Accept-Encoding", "identity")
-//         .header("Connection", "close")
-//         .body(String::from(""))
-//         .unwrap();
-
-//     let response = match request_sender.send_request(request_builder).await {
-//         Ok(response) => response,
-//         Err(_) => {
-//             return HttpResponse::InternalServerError().body(
-//                 json!(ServerError::new(
-//                     format!("Request to {} failed", notarize_headers.host).as_str()
-//                 ))
-//                 .to_string(),
-//             )
-//         }
-//     };
-//     assert!(response.status() == StatusCode::OK);
-
-//     // Grab prover and build proof without redaction
-//     let prover = prover_task.await.unwrap().unwrap();
-//     let prover = prover.start_notarize();
-//     let proof = build_proof_without_redactions(prover).await;
-
-//     HttpResponse::Ok().body(json!(proof).to_string())
-// }
-
 pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest) -> HttpResponse {
     let r2 = data.clone();
 
@@ -240,7 +120,7 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
     let prover = prover.start_notarize();
     let proof = build_proof_without_redactions(prover).await;
 
-    let file_name = format!("proof_of_{}.json", notarize_headers.id);
+    let file_name = format!("{}.json", notarize_headers.id);
     r2.upload(
         file_name.as_str(),
         serde_json::to_string_pretty(&proof).unwrap().as_bytes(),
@@ -251,30 +131,6 @@ pub async fn handle_notarize_v2(data: web::Data<R2Manager>, request: HttpRequest
 
     HttpResponse::Ok().body(serde_json::to_string(&proof).unwrap())
 }
-
-// async fn setup_prover(conn: DuplexStream, host: &str) -> Result<Prover<Setup>, ServerError> {
-//     let config = match ProverConfig::builder()
-//         .id("cv3.xyz")
-//         .server_dns(host)
-//         .max_recv_data(DEFAULT_MAX_RECV_LIMIT)
-//         .max_sent_data(DEFAULT_MAX_SENT_LIMIT)
-//         .build()
-//     {
-//         Ok(config) => config,
-//         Err(error) => {
-//             println!("Failed to setup prover's config with error {:?}", error);
-//             return Err(ServerError::new("Internal server error"));
-//         }
-//     };
-
-//     match Prover::new(config).setup(conn.compat()).await {
-//         Ok(prover) => Ok(prover),
-//         Err(error) => {
-//             println!("Failed to setup prover with error {:?}", error);
-//             return Err(ServerError::new("Internal server error"));
-//         }
-//     }
-// }
 
 async fn build_proof_without_redactions(mut prover: Prover<Notarize>) -> TlsProof {
     let sent_len = prover.sent_transcript().data().len();
