@@ -34,6 +34,7 @@ struct NotarizeHeaders {
     host: String,
     path: String,
     method: String,
+    auth: String,
 }
 
 pub async fn handle_notarize_v2(
@@ -46,15 +47,9 @@ pub async fn handle_notarize_v2(
         Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
     };
 
-    // Separate this as not all APIs require authorization
-    let auth_header = match extract_header(headers, "x-tlsn-auth") {
-        Ok(header) => header,
-        Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
-    };
     info!(
-        "Headers extracted: notarizer headers:{} + auth header {}",
+        "Headers extracted: notarizer headers: {}",
         json!(notarize_headers).to_string(),
-        auth_header
     );
 
     let request_body = match String::from_utf8(bytes.to_vec()) {
@@ -136,7 +131,7 @@ pub async fn handle_notarize_v2(
         .uri(&request_uri)
         .method(hyper::Method::from_str(&notarize_headers.method).unwrap())
         .header("Host", &notarize_headers.host)
-        .header("Authorization", format!("Bearer {}", auth_header))
+        .header("authorization", &notarize_headers.auth)
         .header("Accept", "*/*")
         .header("User-Agent", "TaskFi ID")
         .body(request_body)
@@ -255,12 +250,14 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
     let path = extract_header(headers, "x-tlsn-path")?;
     let method = extract_header(headers, "x-tlsn-method")?;
     let request_id = extract_header(headers, "x-tlsn-id")?;
+    let auth = extract_header(headers, "authorization")?;
 
     Ok(NotarizeHeaders {
         id: request_id,
         host,
         path,
         method,
+        auth,
     })
 }
 
