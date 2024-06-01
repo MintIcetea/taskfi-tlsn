@@ -10,11 +10,16 @@ use actix_web::{
     http::{header::HeaderMap, Method},
     HttpRequest, HttpResponse,
 };
-use hyper::{Request, StatusCode};
+use http_body_util::BodyExt;
+use hyper::Request;
 use hyper_util::rt::TokioIo;
 use serde_json::json;
 use tlsn_core::proof::TlsProof;
-use tlsn_prover::tls::{state::Notarize, Prover, ProverConfig};
+use tlsn_prover::tls::{
+    state::{Closed, Notarize},
+    Prover, ProverConfig, ProverError,
+};
+use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing_log::log::info;
 
@@ -73,31 +78,7 @@ pub async fn handle_notarize_v2(
     };
     info!("Body extracted {}", json!(request_body).to_string());
 
-    let request_id = notarize_headers.id.clone().to_string();
-
-    tokio::spawn(background_notarize(
-        notarize_headers,
-        String::from(auth_header),
-        request_body.clone(),
-    ));
-
-    HttpResponse::Accepted()
-        .body(serde_json::to_string(&NotarizeResponse { id: request_id }).unwrap())
-}
-
-async fn background_notarize(headers: NotarizeHeaders, auth_header: String, request_body: String) {
-    let proofs = notarize(&headers, auth_header.clone(), request_body.clone()).await;
-
-    let file_name = format!("{}.json", headers.id);
-
-    store_proofs(
-        file_name.as_str(),
-        serde_json::to_string(&proofs).unwrap().as_bytes(),
-    )
-    .await;
-}
-
-async fn notarize(headers: &NotarizeHeaders, auth_header: String, request_body: String) -> String {
+    // Separate this into prover and notary server later
     let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
     // Start a local simple notary service
@@ -108,7 +89,7 @@ async fn notarize(headers: &NotarizeHeaders, auth_header: String, request_body: 
         .id("example")
         .max_recv_data(DEFAULT_MAX_RECV_LIMIT)
         .max_sent_data(DEFAULT_MAX_SENT_LIMIT)
-        .server_dns(headers.host.clone())
+        .server_dns(notarize_headers.host.clone())
         .build()
         .unwrap();
 
@@ -122,7 +103,7 @@ async fn notarize(headers: &NotarizeHeaders, auth_header: String, request_body: 
 
     info!("Init TLS connection from client to server");
     // Connect to the Server via TCP. This is the TLS client socket.
-    let client_socket = tokio::net::TcpStream::connect((headers.host.clone(), 443))
+    let client_socket = tokio::net::TcpStream::connect((notarize_headers.host.clone(), 443))
         .await
         .unwrap();
 
@@ -145,12 +126,16 @@ async fn notarize(headers: &NotarizeHeaders, auth_header: String, request_body: 
     // Spawn the HTTP task to be run concurrently
     tokio::spawn(connection);
 
+    let request_uri = format!(
+        "https://{}/{}",
+        &notarize_headers.host, &notarize_headers.path
+    );
     // Build a simple HTTP request with common headers
-    info!("Requesting to https://{}/{}", headers.host, headers.path);
+    info!("Requesting to {}", request_uri);
     let request_builder = Request::builder()
-        .uri(format!("https://{}/{}", headers.host, headers.path))
-        .method(hyper::Method::from_str(&headers.method).unwrap())
-        .header("Host", headers.host.clone())
+        .uri(&request_uri)
+        .method(hyper::Method::from_str(&notarize_headers.method).unwrap())
+        .header("Host", &notarize_headers.host)
         .header("Authorization", format!("Bearer {}", auth_header))
         .header("Accept", "*/*")
         .header("User-Agent", "TaskFi ID")
@@ -159,17 +144,55 @@ async fn notarize(headers: &NotarizeHeaders, auth_header: String, request_body: 
 
     let response = match request_sender.send_request(request_builder).await {
         Ok(response) => response,
-        Err(_) => {
-            tracing::error!("Request to {} failed", headers.host);
-            return String::from("");
+        Err(err) => {
+            tracing::error!("Request to {} failed with error {:?}", &request_uri, err);
+            return HttpResponse::InternalServerError()
+                .body(json!(ServerError::new(format!("{:?}", err).as_str())).to_string());
         }
     };
-    assert!(response.status() == StatusCode::OK);
+
+    // Read raw response
+    let response_data = String::from_utf8(
+        response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+
+    let request_id = notarize_headers.id.clone().to_string();
+    tokio::spawn(background_notarize(request_id, prover_task));
+
+    // Return the response early
+    info!("Request to {} came back OK", &request_uri);
+    HttpResponse::Ok().body(response_data)
+}
+
+async fn background_notarize(
+    request_id: String,
+    prover_task: JoinHandle<Result<Prover<Closed>, ProverError>>,
+) {
+    let proofs = notarize(prover_task).await;
+
+    let file_name = format!("{}.json", request_id);
+
     info!(
-        "Request to https://{}/{} came back OK",
-        headers.host, headers.path
+        "file created {} with content {}",
+        file_name,
+        serde_json::to_string(&proofs).unwrap()
     );
 
+    store_proofs(
+        file_name.as_str(),
+        serde_json::to_string(&proofs).unwrap().as_bytes(),
+    )
+    .await;
+}
+
+async fn notarize(prover_task: JoinHandle<Result<Prover<Closed>, ProverError>>) -> String {
     // The Prover task should be done now, so we can grab the Prover.
     let prover = prover_task.await.unwrap().unwrap();
 
