@@ -7,7 +7,8 @@ use crate::{
     r2::R2Manager,
 };
 use actix_web::{
-    http::{header::HeaderMap, Method},
+    body::BoxBody,
+    http::{header::HeaderMap, Method, StatusCode},
     HttpRequest, HttpResponse,
 };
 use http_body_util::BodyExt;
@@ -147,6 +148,7 @@ pub async fn handle_notarize_v2(
     };
 
     // Read raw response
+    let response_status = response.status();
     let response_data = String::from_utf8(
         response
             .into_body()
@@ -158,12 +160,17 @@ pub async fn handle_notarize_v2(
     )
     .unwrap();
 
-    let request_id = notarize_headers.id.clone().to_string();
-    tokio::spawn(background_notarize(request_id, prover_task));
+    // Only generate proofs when the request is successful
+    if !response_status.is_client_error() && !response_status.is_server_error() {
+        let request_id = notarize_headers.id.clone().to_string();
+        tokio::spawn(background_notarize(request_id, prover_task));
+    }
 
     // Return the response early
-    info!("Request to {} came back OK", &request_uri);
-    HttpResponse::Ok().body(response_data)
+    HttpResponse::with_body(
+        StatusCode::from_u16(response_status.as_u16()).unwrap(),
+        BoxBody::new(response_data),
+    )
 }
 
 async fn background_notarize(
