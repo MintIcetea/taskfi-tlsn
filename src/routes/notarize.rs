@@ -78,7 +78,7 @@ pub async fn handle_notarize_v2(
     let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
 
     // Start a local simple notary service
-    tokio::spawn(run_notary(notary_socket.compat()));
+    let notary_task = tokio::spawn(run_notary(notary_socket.compat()));
 
     // A Prover configuration
     let config = ProverConfig::builder()
@@ -164,6 +164,10 @@ pub async fn handle_notarize_v2(
     if !response_status.is_client_error() && !response_status.is_server_error() {
         let request_id = notarize_headers.id.clone().to_string();
         tokio::spawn(background_notarize(request_id, prover_task));
+    } else {
+        // Close running task
+        prover_task.abort();
+        notary_task.abort();
     }
 
     // Return the response early
