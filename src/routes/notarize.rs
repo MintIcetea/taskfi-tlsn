@@ -22,6 +22,7 @@ use tlsn_prover::tls::{
 };
 use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
+use tracing::warn;
 use tracing_log::log::info;
 
 #[derive(serde::Serialize)]
@@ -48,11 +49,6 @@ pub async fn handle_notarize_v2(
         Err(err) => return HttpResponse::BadRequest().body(json!(err).to_string()),
     };
 
-    info!(
-        "Headers extracted: notarizer headers: {}",
-        json!(notarize_headers).to_string(),
-    );
-
     let request_body = match String::from_utf8(bytes.to_vec()) {
         Ok(body) => body,
         Err(_) => {
@@ -72,7 +68,12 @@ pub async fn handle_notarize_v2(
             String::from("")
         }
     };
-    info!("Body extracted {}", json!(request_body).to_string());
+
+    info!(
+        "Receive incoming request: headers: {}, body: {}",
+        json!(notarize_headers),
+        request_body
+    );
 
     // Separate this into prover and notary server later
     let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
@@ -91,13 +92,11 @@ pub async fn handle_notarize_v2(
 
     // Create a Prover and set it up with the Notary
     // This will set up the MPC backend prior to connecting to the server.
-    info!("Init local prover");
     let prover = Prover::new(config)
         .setup(prover_socket.compat())
         .await
         .unwrap();
 
-    info!("Init TLS connection from client to server");
     // Connect to the Server via TCP. This is the TLS client socket.
     let client_socket = tokio::net::TcpStream::connect((notarize_headers.host.clone(), 443))
         .await
@@ -106,7 +105,6 @@ pub async fn handle_notarize_v2(
     // Bind the Prover to the server connection.
     // The returned `mpc_tls_connection` is an MPC TLS connection to the Server: all data written
     // to/read from it will be encrypted/decrypted using MPC with the Notary.
-    info!("Binding Prover to the connection between local prover and server");
     let (mpc_tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
     let mpc_tls_connection = TokioIo::new(mpc_tls_connection.compat());
 
@@ -127,7 +125,7 @@ pub async fn handle_notarize_v2(
         &notarize_headers.host, &notarize_headers.path
     );
     // Build a simple HTTP request with common headers
-    info!("Requesting to {}", request_uri);
+    info!("Notary server initialized. MPC_TLS connection between client and prover initialized. Start requesting to {}", request_uri);
     let request_builder = Request::builder()
         .uri(&request_uri)
         .method(hyper::Method::from_str(&notarize_headers.method).unwrap())
@@ -165,6 +163,11 @@ pub async fn handle_notarize_v2(
         let request_id = notarize_headers.id.clone().to_string();
         tokio::spawn(background_notarize(request_id, prover_task));
     } else {
+        warn!(
+            "Response NOT OK: status {}, body: {}",
+            response_status, response_data
+        );
+
         // Close running task
         prover_task.abort();
         notary_task.abort();
@@ -182,20 +185,14 @@ async fn background_notarize(
     prover_task: JoinHandle<Result<Prover<Closed>, ProverError>>,
 ) {
     let proofs = notarize(prover_task).await;
-
     let file_name = format!("{}.json", request_id);
-
-    info!(
-        "file created {} with content {}",
-        file_name,
-        serde_json::to_string(&proofs).unwrap()
-    );
-
     store_proofs(
         file_name.as_str(),
         serde_json::to_string(&proofs).unwrap().as_bytes(),
     )
     .await;
+
+    info!("Proof uploaded to R2: file_name: {}", file_name);
 }
 
 async fn notarize(prover_task: JoinHandle<Result<Prover<Closed>, ProverError>>) -> String {
@@ -219,8 +216,6 @@ async fn store_proofs(file_name: &str, proofs: &[u8]) {
     });
 
     let r2 = R2Manager::new(&app_config.r2).await;
-
-    info!("Start uploading {} to R2", file_name);
     r2.upload(
         file_name,
         proofs,
