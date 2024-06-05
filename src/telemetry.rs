@@ -14,8 +14,7 @@ pub fn setup_subscriber() -> impl Subscriber + Sync + Send {
 
     Registry::default()
         .with(env_filter)
-        .with(file_filter)
-        .with(format_layer)
+        .with(format_layer.with_filter(file_filter))
 }
 
 /// Register a subscriber as global default to process span data.
@@ -36,8 +35,6 @@ impl FileFilter {
         Self { pattern }
     }
 }
-
-impl<S: Subscriber> Layer<S> for FileFilter {}
 
 impl<S: Subscriber> Filter<S> for FileFilter {
     fn enabled(
