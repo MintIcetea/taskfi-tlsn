@@ -10,6 +10,7 @@ mod notary;
 mod r2;
 mod routes;
 mod startup;
+mod telemetry;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
