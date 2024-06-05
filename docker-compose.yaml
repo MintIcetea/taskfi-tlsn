@@ -1,0 +1,11 @@
+version: '3'
+services: 
+  prover:
+    build: .
+    ports:
+      - "8000:8000"
+
+  notary:
+    image: ghcr.io/tlsnotary/tlsn/notary-server:v0.1.0-alpha.5
+    ports:
+      - "7047:7047"
