@@ -25,6 +25,7 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 use tracing_log::log::info;
 
+/// TODO: Read these settings from a config file.
 // Setting of the notary server
 const NOTARY_HOST: &str = "0.0.0.0";
 const NOTARY_PORT: u16 = 7047;
