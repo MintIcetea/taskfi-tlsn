@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{
     config::read_config,
     errors::ServerError,
-    notary::{run_notary, DEFAULT_MAX_RECV_LIMIT, DEFAULT_MAX_SENT_LIMIT},
+    notary::request_notarization,
     r2::R2Manager,
 };
 use actix_web::{
@@ -24,6 +24,14 @@ use tokio::task::JoinHandle;
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 use tracing_log::log::info;
+
+// Setting of the notary server
+const NOTARY_HOST: &str = "0.0.0.0";
+const NOTARY_PORT: u16 = 7047;
+
+// Configuration of notarization
+const NOTARY_MAX_SENT: usize = 1 << 12;
+const NOTARY_MAX_RECV: usize = 1 << 14;
 
 #[derive(serde::Serialize)]
 struct NotarizeResponse {
@@ -75,17 +83,18 @@ pub async fn handle_notarize_v2(
         request_body
     );
 
-    // Separate this into prover and notary server later
-    let (prover_socket, notary_socket) = tokio::io::duplex(1 << 16);
-
-    // Start a local simple notary service
-    let notary_task = tokio::spawn(run_notary(notary_socket.compat()));
+    let (notary_socket, session_id) = request_notarization(
+        NOTARY_HOST, 
+        NOTARY_PORT,
+        Some(NOTARY_MAX_SENT), 
+        Some(NOTARY_MAX_RECV),
+    ).await;
 
     // A Prover configuration
     let config = ProverConfig::builder()
-        .id("example")
-        .max_recv_data(DEFAULT_MAX_RECV_LIMIT)
-        .max_sent_data(DEFAULT_MAX_SENT_LIMIT)
+        .id(session_id)
+        //.max_recv_data(NOTARY_MAX_SENT)
+        //.max_sent_data(NOTARY_MAX_RECV)
         .server_dns(notarize_headers.host.clone())
         .build()
         .unwrap();
@@ -93,7 +102,7 @@ pub async fn handle_notarize_v2(
     // Create a Prover and set it up with the Notary
     // This will set up the MPC backend prior to connecting to the server.
     let prover = Prover::new(config)
-        .setup(prover_socket.compat())
+        .setup(notary_socket.compat())
         .await
         .unwrap();
 
@@ -170,7 +179,6 @@ pub async fn handle_notarize_v2(
 
         // Close running task
         prover_task.abort();
-        notary_task.abort();
     }
 
     // Return the response early
@@ -256,7 +264,7 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
     let path = extract_header(headers, "x-tlsn-path")?;
     let method = extract_header(headers, "x-tlsn-method")?;
     let request_id = extract_header(headers, "x-tlsn-id")?;
-    let auth = extract_header(headers, "authorization")?;
+    let auth = extract_header(headers, "x-tlsn-auth")?;
 
     Ok(NotarizeHeaders {
         id: request_id,
