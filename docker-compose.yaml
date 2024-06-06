@@ -3,7 +3,7 @@ services:
     build: .
     environment:
       - APP_ENV=production
-      - RUST_LOG=warn
+      - RUST_LOG=info
     ports:
       - "8000:8000"
     volumes:
