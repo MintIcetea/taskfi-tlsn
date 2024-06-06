@@ -18,5 +18,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/target/release/taskfi-tlsn taskfi-tlsn
+
+# Copy over server configuration
+COPY config/base.json config/base.json
+COPY config/production.json config/production.json
+
 ENV APP_ENV production
 ENTRYPOINT [ "./taskfi-tlsn" ]
