@@ -24,5 +24,5 @@ COPY config/base.json config/base.json
 COPY config/production.json config/production.json
 
 ENV APP_ENV production
-ENV RUST_LOG warn
+ENV RUST_LOG info
 ENTRYPOINT [ "./taskfi-tlsn" ]
