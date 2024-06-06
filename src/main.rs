@@ -22,6 +22,7 @@ async fn main() -> std::io::Result<()> {
     });
 
     let r2 = R2Manager::new(&app_config.r2).await;
+    let notary_config = app_config.notary;
 
     let app_address = format!(
         "{}:{}",
@@ -32,5 +33,5 @@ async fn main() -> std::io::Result<()> {
 
     let listener = TcpListener::bind(app_address.clone())
         .expect(format!("Failed to listen on {}", app_address).as_str());
-    run(listener, r2).await.unwrap().await
+    run(listener, r2, notary_config).await.unwrap().await
 }
