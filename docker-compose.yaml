@@ -1,7 +1,12 @@
-version: '3'
-services: 
-  prover:
+version: "3.8"
+
+services:
+  taskfi-tlsn:
+    image: taskfi-tlsn/taskfi-tlsn
     build: .
+    environment:
+      - APP_ENV=production
+      - RUST_LOG=warn
     ports:
       - "8000:8000"
     volumes:
@@ -13,4 +18,3 @@ services:
       - "7047:7047"
     volumes:
       - ./config:/root/.notary-server/config
-
