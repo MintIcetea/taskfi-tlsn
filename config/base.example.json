@@ -3,6 +3,7 @@
     "port": 8000
   },
   "notary": {
+    "host": "notary",
     "port": 7047
   },
   "r2": {

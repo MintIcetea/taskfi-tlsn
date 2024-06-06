@@ -3,12 +3,18 @@ use config;
 #[derive(serde::Deserialize)]
 pub struct Settings {
     pub application: AppConfig,
-    pub notary: AppConfig,
+    pub notary: NotaryConfig,
     pub r2: R2Config,
 }
 
 #[derive(serde::Deserialize)]
 pub struct AppConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct NotaryConfig {
     pub host: String,
     pub port: u16,
 }
