@@ -1,8 +1,5 @@
-version: "3.8"
-
 services:
   taskfi-tlsn:
-    image: taskfi-tlsn/taskfi-tlsn
     build: .
     environment:
       - APP_ENV=production
