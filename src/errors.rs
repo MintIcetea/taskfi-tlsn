@@ -6,17 +6,19 @@ pub struct ServerResponse<T> {
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
-pub struct ServerError<'a> {
-    pub error: &'a str,
+pub struct ServerError {
+    pub error: String,
 }
 
-impl<'a> ServerError<'a> {
-    pub fn new(message: &'a str) -> Self {
-        ServerError { error: message }
+impl ServerError {
+    pub fn new(message: &str) -> Self {
+        ServerError {
+            error: message.to_string(),
+        }
     }
 }
 
-impl<'a> Debug for ServerError<'a> {
+impl Debug for ServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.error)
     }
