@@ -310,7 +310,7 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
     let method = extract_header(headers, "x-tlsn-method")?;
     let method = match RequestMethod::try_from(method) {
         Ok(method) => method,
-        Err(err) => return Err(ServerError::new(err.to_owned().as_str())),
+        Err(err) => return Err(ServerError::new(&err)),
     };
 
     let request_id = extract_header(headers, "x-tlsn-id")?;
