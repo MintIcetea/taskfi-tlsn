@@ -3,7 +3,7 @@ use std::str::FromStr;
 use crate::{
     config::read_config,
     errors::ServerError,
-    notary::request_notarization,
+    notary::{request_notarization, NOTARY_MAX_SENT, NOTARY_MAX_RECV},
     r2::R2Manager,
 };
 use actix_web::{
@@ -25,15 +25,6 @@ use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 use tracing_log::log::info;
 
-/// TODO: Read these settings from a config file.
-// Setting of the notary server
-const NOTARY_HOST: &str = "0.0.0.0";
-const NOTARY_PORT: u16 = 7047;
-
-// Configuration of notarization
-const NOTARY_MAX_SENT: usize = 1 << 12;
-const NOTARY_MAX_RECV: usize = 1 << 14;
-
 #[derive(serde::Serialize)]
 struct NotarizeResponse {
     id: String,
@@ -48,10 +39,21 @@ struct NotarizeHeaders {
     auth: String,
 }
 
+macro_rules! internal_server_error {
+    ($message:expr, $err:expr) => {
+        tracing::error!("{}, error: {:?}", $message, $err);
+        return HttpResponse::InternalServerError().body(
+            json!(ServerError::new(format!("{:?}", $err).as_str())).to_string());
+    }
+}
+
 pub async fn handle_notarize_v2(
     request: HttpRequest,
     bytes: actix_web::web::Bytes,
 ) -> HttpResponse {
+
+    // Start request validation
+
     let headers = request.headers();
     let notarize_headers = match extract_headers(headers) {
         Ok(headers) => headers,
@@ -78,54 +80,100 @@ pub async fn handle_notarize_v2(
         }
     };
 
+    match hyper::Method::from_str(&notarize_headers.method) {
+        Ok(_) => (),
+        Err(_) => {
+            return HttpResponse::BadRequest().body(
+                json!(ServerError::new(
+                    format!(
+                        "Invalid request method {}", request.method().to_string()
+                    )
+                    .as_str()
+                ))
+                .to_string(),
+            );
+        }
+    }
+
     info!(
         "Receive incoming request: headers: {}, body: {}",
         json!(notarize_headers),
         request_body
     );
 
-    let (notary_socket, session_id) = request_notarization(
-        NOTARY_HOST, 
-        NOTARY_PORT,
-        Some(NOTARY_MAX_SENT), 
-        Some(NOTARY_MAX_RECV),
-    ).await;
+    // Start notarizing data
+
+    let app_config = match read_config() {
+        Ok(app_config) => app_config,
+        Err(err) => {
+            internal_server_error!("Failed to read app config", err);
+        },
+    };
+    let notary_host: &str = &app_config.notary.host;
+    let notary_port: u16 = app_config.notary.port;
+
+    let (notary_socket, session_id) = match request_notarization(
+        notary_host,
+        notary_port,
+    ).await {
+        Ok((notary_socket, session_id)) => (notary_socket, session_id),
+        Err(err) => {
+            internal_server_error!(format!("Failed to request notarization from \
+                notary server at {}:{}", notary_host, notary_port), err);
+        }
+    };
 
     // A Prover configuration
-    let config = ProverConfig::builder()
+    let config = match ProverConfig::builder()
         .id(session_id)
-        //.max_recv_data(NOTARY_MAX_SENT)
-        //.max_sent_data(NOTARY_MAX_RECV)
-        .server_dns(notarize_headers.host.clone())
-        .build()
-        .unwrap();
+        .max_recv_data(NOTARY_MAX_SENT)
+        .max_sent_data(NOTARY_MAX_RECV)
+        .server_dns(notarize_headers.host.clone()).build() {
+            Ok(config) => config,
+            Err(err) => {
+                internal_server_error!("Failed to build prover configuration", err);
+            }
+        };
 
     // Create a Prover and set it up with the Notary
     // This will set up the MPC backend prior to connecting to the server.
-    let prover = Prover::new(config)
-        .setup(notary_socket.compat())
-        .await
-        .unwrap();
+    let prover = match Prover::new(config).setup(notary_socket.compat()).await {
+        Ok(prover) => prover,
+        Err(err) => {
+            internal_server_error!("Failed to setup the prover", err);
+        }
+    };
 
     // Connect to the Server via TCP. This is the TLS client socket.
-    let client_socket = tokio::net::TcpStream::connect((notarize_headers.host.clone(), 443))
-        .await
-        .unwrap();
+    let client_socket = match tokio::net::TcpStream::connect((notarize_headers.host.clone(), 443)).await {
+        Ok(client_socket) => client_socket,
+        Err(err) => {
+            internal_server_error!("Failed to connect to the notary server", err);
+        }
+    };
 
     // Bind the Prover to the server connection.
     // The returned `mpc_tls_connection` is an MPC TLS connection to the Server: all data written
     // to/read from it will be encrypted/decrypted using MPC with the Notary.
-    let (mpc_tls_connection, prover_fut) = prover.connect(client_socket.compat()).await.unwrap();
+    let (mpc_tls_connection, prover_fut) = match prover.connect(client_socket.compat()).await {
+        Ok((mpc_tls_connection, prover_fut)) => (mpc_tls_connection, prover_fut),
+        Err(err) => {
+            internal_server_error!("Failed to bind the prover to the notary", err);
+        }
+    };
     let mpc_tls_connection = TokioIo::new(mpc_tls_connection.compat());
 
     // Spawn the Prover task to be run concurrently
     let prover_task = tokio::spawn(prover_fut);
 
     // Attach the hyper HTTP client to the MPC TLS connection
-    let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(mpc_tls_connection)
-            .await
-            .unwrap();
+    let (mut request_sender, connection) = match
+        hyper::client::conn::http1::handshake(mpc_tls_connection).await {
+            Ok((request_sender, connection)) => (request_sender, connection),
+            Err(err) => {
+                internal_server_error!("Failed to attach HTTP client to MPC connection", err);
+            }
+        };
 
     // Spawn the HTTP task to be run concurrently
     tokio::spawn(connection);
@@ -135,29 +183,32 @@ pub async fn handle_notarize_v2(
         &notarize_headers.host, &notarize_headers.path
     );
     // Build a simple HTTP request with common headers
-    info!("Notary server initialized. MPC_TLS connection between client and prover initialized. Start requesting to {}", request_uri);
-    let request_builder = Request::builder()
+    info!("Notary server initialized. MPC_TLS connection between client and prover \
+        initialized. Start requesting to {}", request_uri);
+    let request = match Request::builder()
         .uri(&request_uri)
         .method(hyper::Method::from_str(&notarize_headers.method).unwrap())
         .header("Host", &notarize_headers.host)
         .header("authorization", &notarize_headers.auth)
         .header("Accept", "*/*")
         .header("User-Agent", "TaskFi ID")
-        .body(request_body)
-        .unwrap();
+        .body(request_body) {
+            Ok(request) => request,
+            Err(err) => {
+                internal_server_error!("Failed to build notarize request", err);
+            }
+        };
 
-    let response = match request_sender.send_request(request_builder).await {
+    let response = match request_sender.send_request(request).await {
         Ok(response) => response,
         Err(err) => {
-            tracing::error!("Request to {} failed with error {:?}", &request_uri, err);
-            return HttpResponse::InternalServerError()
-                .body(json!(ServerError::new(format!("{:?}", err).as_str())).to_string());
+            internal_server_error!(format!("Request to {} failed", &request_uri), err);
         }
     };
 
     // Read raw response
     let response_status = response.status();
-    let response_data = String::from_utf8(
+    let response_data = match String::from_utf8(
         response
             .into_body()
             .collect()
@@ -165,8 +216,12 @@ pub async fn handle_notarize_v2(
             .unwrap()
             .to_bytes()
             .to_vec(),
-    )
-    .unwrap();
+    ){
+        Ok(response_data) => response_data,
+        Err(err) => {
+            internal_server_error!("Failed to read the raw response", err);
+        }
+    };
 
     // Only generate proofs when the request is successful
     if !response_status.is_client_error() && !response_status.is_server_error() {
@@ -265,7 +320,7 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
     let path = extract_header(headers, "x-tlsn-path")?;
     let method = extract_header(headers, "x-tlsn-method")?;
     let request_id = extract_header(headers, "x-tlsn-id")?;
-    let auth = extract_header(headers, "x-tlsn-auth")?;
+    let auth = extract_header(headers, "authorization")?;
 
     Ok(NotarizeHeaders {
         id: request_id,
