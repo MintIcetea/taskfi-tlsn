@@ -2,6 +2,9 @@
   "application": {
     "port": 8000
   },
+  "notary": {
+    "port": 7047
+  },
   "r2": {
     "uri": "https://example.com",
     "bucket_name": "example-name",

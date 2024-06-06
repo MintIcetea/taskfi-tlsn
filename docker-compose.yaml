@@ -4,8 +4,13 @@ services:
     build: .
     ports:
       - "8000:8000"
+    volumes:
+      - ./config:/app/config
 
   notary:
     image: ghcr.io/tlsnotary/tlsn/notary-server:v0.1.0-alpha.5
     ports:
       - "7047:7047"
+    volumes:
+      - ./config:/root/.notary-server/config
+
