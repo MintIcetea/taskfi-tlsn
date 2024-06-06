@@ -3,6 +3,7 @@ use std::str::FromStr;
 use crate::{
     config::{read_config, NotaryConfig},
     errors::ServerError,
+    hyper::RequestMethod,
     notary::{request_notarization, NOTARY_MAX_RECV, NOTARY_MAX_SENT},
     r2::R2Manager,
 };
@@ -30,12 +31,12 @@ struct NotarizeResponse {
     id: String,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(serde::Serialize)]
 struct NotarizeHeaders {
     id: String,
     host: String,
     path: String,
-    method: String,
+    method: RequestMethod,
     auth: String,
 }
 
@@ -79,18 +80,6 @@ pub async fn handle_notarize_v2(
             String::from("")
         }
     };
-
-    match hyper::Method::from_str(&notarize_headers.method) {
-        Ok(_) => (),
-        Err(_) => {
-            return HttpResponse::BadRequest().body(
-                json!(ServerError::new(
-                    format!("Invalid request method {}", request.method().to_string()).as_str()
-                ))
-                .to_string(),
-            );
-        }
-    }
 
     info!(
         "Receive incoming request: headers: {}, body: {}",
@@ -187,7 +176,7 @@ pub async fn handle_notarize_v2(
     );
     let request = match Request::builder()
         .uri(&request_uri)
-        .method(hyper::Method::from_str(&notarize_headers.method).unwrap())
+        .method(notarize_headers.method.as_ref())
         .header("Host", &notarize_headers.host)
         .header("authorization", &notarize_headers.auth)
         .header("Accept", "*/*")
@@ -319,7 +308,13 @@ async fn build_proof_without_redactions(mut prover: Prover<Notarize>) -> TlsProo
 fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> {
     let host = extract_header(headers, "x-tlsn-host")?;
     let path = extract_header(headers, "x-tlsn-path")?;
+
     let method = extract_header(headers, "x-tlsn-method")?;
+    let method = match hyper::Method::from_str(&method) {
+        Ok(method) => method,
+        Err(_) => return Err(ServerError::new("header invalid")),
+    };
+
     let request_id = extract_header(headers, "x-tlsn-id")?;
     let auth = extract_header(headers, "authorization")?;
 
@@ -327,7 +322,7 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
         id: request_id,
         host,
         path,
-        method,
+        method: RequestMethod::new(method),
         auth,
     })
 }

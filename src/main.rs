@@ -6,6 +6,7 @@ use startup::run;
 
 mod config;
 mod errors;
+mod hyper;
 mod notary;
 mod r2;
 mod routes;
