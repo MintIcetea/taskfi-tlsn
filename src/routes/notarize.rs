@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::{
     config::{read_config, NotaryConfig},
     errors::ServerError,
@@ -310,9 +308,9 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
     let path = extract_header(headers, "x-tlsn-path")?;
 
     let method = extract_header(headers, "x-tlsn-method")?;
-    let method = match hyper::Method::from_str(&method) {
+    let method = match RequestMethod::try_from(method) {
         Ok(method) => method,
-        Err(_) => return Err(ServerError::new("header invalid")),
+        Err(err) => return Err(ServerError::new(err.to_owned().as_str())),
     };
 
     let request_id = extract_header(headers, "x-tlsn-id")?;
@@ -322,12 +320,12 @@ fn extract_headers(headers: &HeaderMap) -> Result<NotarizeHeaders, ServerError> 
         id: request_id,
         host,
         path,
-        method: RequestMethod::new(method),
+        method,
         auth,
     })
 }
 
-fn extract_header<'a>(headers: &'a HeaderMap, key: &str) -> Result<String, ServerError<'a>> {
+fn extract_header(headers: &HeaderMap, key: &str) -> Result<String, ServerError> {
     let header = match headers.get(key) {
         Some(header) => header,
         None => {

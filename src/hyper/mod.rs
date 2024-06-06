@@ -1,10 +1,17 @@
+use std::str::FromStr;
+
 use hyper::Method;
 
 pub struct RequestMethod(hyper::Method);
 
-impl RequestMethod {
-    pub fn new(method: Method) -> Self {
-        RequestMethod(method)
+impl TryFrom<String> for RequestMethod {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let method = match Method::from_str(s.as_str()) {
+            Ok(method) => method,
+            Err(_) => return Err("Invalid request method".to_string()),
+        };
+        Ok(Self(method))
     }
 }
 
