@@ -67,7 +67,7 @@ pub async fn handle_notarize_v2(
                     json!(ServerError::new(
                         format!(
                             "Cannot execute {} request without request body",
-                            request.method().to_string()
+                            request.method()
                         )
                         .as_str()
                     ))
@@ -337,7 +337,7 @@ fn extract_header(headers: &HeaderMap, key: &str) -> Result<String, ServerError>
         Ok(header) => Ok(String::from(header)),
         Err(err) => {
             println!("Cannot parsed {} header with error {:?}", key, err);
-            return Err(ServerError::new("header invalid"));
+            Err(ServerError::new("header invalid"))
         }
     }
 }

@@ -37,11 +37,10 @@ impl R2Manager {
             .credentials_provider(SharedCredentialsProvider::new(s3_credential))
             .build();
 
-        let manager = R2Manager {
+        R2Manager {
             bucket_name: config.bucket_name.clone(),
             client: Arc::new(aws_sdk_s3::Client::new(&s3_config)),
-        };
-        return manager;
+        }
     }
 
     #[allow(dead_code)]
@@ -141,7 +140,7 @@ impl R2Manager {
             debug!("{:?}", result);
             info!("Got successfully {} from {}", object_name, self.bucket_name);
             let bytes = result.body.collect().await.unwrap().into_bytes().to_vec();
-            return Some(bytes);
+            Some(bytes)
         } else {
             debug!("{:?}", get_request.unwrap_err());
             error!("Unable to get {} from {}.", object_name, self.bucket_name);

@@ -33,6 +33,6 @@ async fn main() -> std::io::Result<()> {
     println!("Starting server at http://{}", app_address);
 
     let listener = TcpListener::bind(app_address.clone())
-        .expect(format!("Failed to listen on {}", app_address).as_str());
+        .unwrap_or_else(|_| panic!("Failed to listen on {}", app_address));
     run(listener, r2, notary_config).await.unwrap().await
 }
