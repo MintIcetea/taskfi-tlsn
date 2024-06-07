@@ -1,5 +1,3 @@
-use config;
-
 #[derive(serde::Deserialize)]
 pub struct Settings {
     pub application: AppConfig,
