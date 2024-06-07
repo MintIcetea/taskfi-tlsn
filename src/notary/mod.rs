@@ -18,12 +18,9 @@ pub async fn request_notarization(
     host: &str,
     port: u16,
 ) -> Result<(tokio_rustls::client::TlsStream<TcpStream>, String), Box<dyn std::error::Error>> {
-
     // Connect to the Notary via TLS-TCP
-    let pem_file = std::str::from_utf8(include_bytes!(
-        "../fixture/rootCA.crt"
-    ))?;
-    
+    let pem_file = std::str::from_utf8(include_bytes!("../fixture/rootCA.crt"))?;
+
     let mut reader = std::io::BufReader::new(pem_file.as_bytes());
     let certificates = rustls_pemfile::certs(&mut reader)?;
     let certificate = certificates
@@ -50,8 +47,7 @@ pub async fn request_notarization(
 
     // Attach the hyper HTTP client to the notary TLS connection to send request to the /session endpoint to configure notarization and obtain session id
     let (mut request_sender, connection) =
-        hyper::client::conn::http1::handshake(TokioIo::new(notary_tls_socket))
-            .await?;
+        hyper::client::conn::http1::handshake(TokioIo::new(notary_tls_socket)).await?;
 
     // Spawn the HTTP task to be run concurrently
     let connection_task = tokio::spawn(connection.without_shutdown());
@@ -80,8 +76,8 @@ pub async fn request_notarization(
         .await?
         .to_bytes();
 
-    let notarization_response = serde_json::from_str::<NotarizationSessionResponse>(
-        &String::from_utf8_lossy(&payload))?;
+    let notarization_response =
+        serde_json::from_str::<NotarizationSessionResponse>(&String::from_utf8_lossy(&payload))?;
 
     // Send notarization request via HTTP, where the underlying TCP connection will be extracted later
     let request = Request::builder()
