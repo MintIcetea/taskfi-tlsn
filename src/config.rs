@@ -1,11 +1,13 @@
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct Settings {
     pub application: AppConfig,
     pub notary: NotaryConfig,
+    pub worker: AppConfig,
+    pub queue: QueueConfig,
     pub r2: R2Config,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
@@ -17,7 +19,16 @@ pub struct NotaryConfig {
     pub port: u16,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Clone)]
+pub struct QueueConfig {
+    pub endpoint_url: String,
+    pub queue_url: String,
+    pub region: String,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+}
+
+#[derive(serde::Deserialize, Clone)]
 pub struct R2Config {
     pub uri: String,
     pub bucket_name: String,

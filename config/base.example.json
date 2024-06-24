@@ -6,6 +6,17 @@
     "host": "notary",
     "port": 7047
   },
+  "worker": {
+    "port": 8787,
+    "host": "http://127.0.0.1"
+  },
+  "queue": {
+    "endpoint_url": "http://127.0.0.1:4566",
+    "queue_url": "example-url",
+    "region": "example-region",
+    "access_key_id": "example",
+    "secret_access_key": "example"
+  },
   "r2": {
     "uri": "https://example.com",
     "bucket_name": "example-name",

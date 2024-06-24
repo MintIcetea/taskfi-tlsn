@@ -2,7 +2,7 @@ use crate::{
     config::{read_config, NotaryConfig},
     errors::ServerError,
     hyper::RequestMethod,
-    notary::{request_notarization, NOTARY_MAX_RECV, NOTARY_MAX_SENT},
+    notary::notary::{request_notarization, NOTARY_MAX_RECV, NOTARY_MAX_SENT},
     r2::R2Manager,
 };
 use actix_web::{

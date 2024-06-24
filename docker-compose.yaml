@@ -1,9 +1,6 @@
 services:
   taskfi-tlsn:
     build: .
-    environment:
-      - APP_ENV=production
-      - RUST_LOG=info
     ports:
       - "8000:8000"
     volumes:
@@ -15,3 +12,17 @@ services:
       - "7047:7047"
     volumes:
       - ./config:/root/.notary-server/config
+      
+  localstack:
+    profiles:
+      - dev
+    image: localstack/localstack:3.5.0
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+    environment:
+      - SERVICES=sqs
+    volumes:
+      - "./volume/localstack:/var/lib/localstack"
+      - "./docker-init/localstack:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"

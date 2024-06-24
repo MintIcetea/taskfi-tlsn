@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY . .
 
+# Install cmake to compile rdkafka
+RUN apt-get update && apt-get install cmake -y
+
 RUN cargo build --release
 
 # Smaller runtime
@@ -24,5 +27,5 @@ COPY config/base.json config/base.json
 COPY config/production.json config/production.json
 
 ENV APP_ENV production
-ENV RUST_LOG info
+ENV RUST_LOG info,aws_smithy_runtime=warn,aws_config=warn
 ENTRYPOINT [ "./taskfi-tlsn" ]
