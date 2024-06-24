@@ -2,7 +2,7 @@
 pub struct Settings {
     pub application: AppConfig,
     pub notary: NotaryConfig,
-    pub worker: AppConfig,
+    pub worker: WorkerConfig,
     pub queue: QueueConfig,
     pub r2: R2Config,
 }
@@ -11,10 +11,17 @@ pub struct Settings {
 pub struct AppConfig {
     pub host: String,
     pub port: u16,
+    pub max_thread_limit: usize,
 }
 
 #[derive(serde::Deserialize, Clone)]
 pub struct NotaryConfig {
+    pub host: String,
+    pub port: u16,
+}
+
+#[derive(serde::Deserialize, Clone)]
+pub struct WorkerConfig {
     pub host: String,
     pub port: u16,
 }

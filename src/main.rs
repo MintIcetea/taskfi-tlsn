@@ -1,11 +1,11 @@
-use std::{cmp::min, net::TcpListener, sync::Arc};
+use std::{cmp::min, collections::HashSet, net::TcpListener, sync::Arc};
 
 use config::read_config;
 use notary::consumer::consume;
 use r2::R2Manager;
 use startup::run;
 
-use tokio::{runtime, sync::Semaphore};
+use tokio::{runtime, sync::Mutex};
 
 mod config;
 mod errors;
@@ -15,8 +15,6 @@ mod r2;
 mod routes;
 mod startup;
 mod telemetry;
-
-const MAX_THREADS_LIMIT: usize = 20;
 
 // Use jemallocator to avoid memory leaking
 #[cfg(all(not(windows), not(target_env = "musl")))]
@@ -44,17 +42,15 @@ async fn main() -> std::io::Result<()> {
 
     let num_threads = std::thread::available_parallelism().unwrap().get();
     let rt = runtime::Builder::new_multi_thread()
-        .worker_threads(min(num_threads, MAX_THREADS_LIMIT))
+        .worker_threads(min(num_threads, app_config.application.max_thread_limit))
         .enable_all()
         .build()
         .unwrap();
 
-    // Using a semaphore to ensure only 1 worker can pull messages from queue at
-    // a time, thus avoid the case where the same message may be consumed twice
-    let semaphore = Arc::new(Semaphore::new(1));
+    let processing_requests = Arc::new(Mutex::new(HashSet::new()));
     for _i in 0..num_threads {
-        let semaphore = semaphore.clone();
-        rt.spawn(async move { consume(semaphore).await });
+        let processing_requests = processing_requests.clone();
+        rt.spawn(async move { consume(processing_requests).await });
     }
 
     let listener = TcpListener::bind(app_address.clone())

@@ -1,4 +1,5 @@
 use core::time;
+use std::{collections::HashSet, sync::Arc};
 
 use crate::{
     config::{read_config, NotaryConfig, Settings},
@@ -21,7 +22,7 @@ use tlsn_prover::tls::{
     state::{Closed, Notarize},
     Prover, ProverConfig, ProverError,
 };
-use tokio::task::JoinHandle;
+use tokio::{sync::Mutex, task::JoinHandle};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use tracing::warn;
 
@@ -33,7 +34,7 @@ macro_rules! error {
 
 const QUEUE_QUERY_INTERVAL: time::Duration = time::Duration::from_millis(10000);
 
-pub async fn consume(semaphore: std::sync::Arc<tokio::sync::Semaphore>) {
+pub async fn consume(processing_requests: Arc<Mutex<HashSet<String>>>) {
     let config = read_config().expect("Failed to load queue config");
 
     let mut interval = tokio::time::interval(QUEUE_QUERY_INTERVAL);
@@ -55,9 +56,6 @@ pub async fn consume(semaphore: std::sync::Arc<tokio::sync::Semaphore>) {
     loop {
         interval.tick().await;
 
-        // Acquire lock for querying cloudflare queue
-        let permit = semaphore.acquire().await.unwrap();
-
         // Get a single message from queue to process
         match sqs_client
             .receive_message()
@@ -72,7 +70,6 @@ pub async fn consume(semaphore: std::sync::Arc<tokio::sync::Semaphore>) {
 
                 if messages.len() == 0 {
                     // No message or empty message
-                    drop(permit);
                     continue;
                 }
 
@@ -84,35 +81,44 @@ pub async fn consume(semaphore: std::sync::Arc<tokio::sync::Semaphore>) {
                     .await
                     .is_err()
                 {
-                    drop(permit);
                     continue;
                 }
 
                 let body = messages[0].body();
                 if body.is_none() {
                     // Empty message
-                    drop(permit);
                     continue;
                 }
 
                 match serde_json::from_str::<QueueRequest>(&body.unwrap()) {
                     Ok(message) => {
-                        // Release the semaphore so other workers can process next messages
-                        drop(permit);
+                        // Lock the mutex to read and insert request id to map
+                        let mut locked_requests = processing_requests.lock().await;
+
+                        if locked_requests.contains(&message.headers.request_id) {
+                            // Request ID is currently processing by other worker
+                            // The mutex will be out of scope by continue
+                            continue;
+                        }
+                        locked_requests.insert(message.headers.request_id.clone());
+                        drop(locked_requests);
 
                         // Notarize the request
                         let _ = notarize(config.clone(), message.clone()).await;
+
+                        // Lock the mutex and remove request id to map
+                        let mut locked_requests = processing_requests.lock().await;
+                        locked_requests.remove(&message.headers.request_id);
+                        drop(locked_requests);
                     }
                     Err(err) => {
                         // Can't serialize the message
                         error!("Can't deserialize request", err);
-                        drop(permit);
                     }
                 }
             }
             Err(err) => {
                 error!("Failed to get queue messages", err);
-                drop(permit);
             }
         }
     }
