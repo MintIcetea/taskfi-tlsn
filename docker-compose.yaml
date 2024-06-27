@@ -1,5 +1,5 @@
 services:
-  taskfi-tlsn:
+  tlsn:
     build: .
     environment:
       - APP_ENV=production
@@ -15,4 +15,4 @@ services:
       - "7047:7047"
     volumes:
       - ./config:/root/.notary-server/config
-      - ./src/fixture:/root/.notary-server/fixture
+      - ./fixture:/root/.notary-server/fixture
